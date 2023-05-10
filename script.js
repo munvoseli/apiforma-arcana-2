@@ -62,8 +62,8 @@ let player = {
 };
 
 let blocks = [
-	{ x: 32, y: 32, w: 32, h: 32 },
-	{ x: 64, y: 0, w: 32, h: 32 },
+	{ x: 64, y: 64, w: 32, h: 32 },
+	{ x: 64, y: 32, w: 32, h: 32 },
 ];
 function step() {
 	switch (1) { default:
@@ -92,34 +92,58 @@ function step() {
 	ctx.clearRect(0, 0, canvas.width, canvas.height);
 	ctx.save();
 	ctx.scale(pxsize, pxsize);
-	for (const block of blocks) {
-		ctx.beginPath();
-		ctx.fillStyle = "#f0f";
-		ctx.fillRect(block.x, block.y, block.w, block.h);
-		ctx.closePath();
-		if (Math.abs(block.x+block.w/2 - player.pos.x) < block.w/2 &&
-		/**/Math.abs(block.y+block.h/2 - player.pos.y) < block.h/2) {
-			const xline = player.pos.x > block.x + block.w/2 ? block.x + block.w : block.x;
-			const yline = player.pos.y > block.y + block.h/2 ? block.y + block.h : block.y;
-			const xd = player.pos.x - xline;
-			const yd = player.pos.y - yline;
-			const xt = xd / player.vel.x;
-			const yt = yd / player.vel.y;
-			let decision;
-			if (xt < 0) {
-				decision = "ya";
-			} else if (yt < 0) {
-				decision = "xa";
-			} else {
-				decision = xt < yt ? "x" : "y";
+	{
+		let minpostime = Infinity;
+		let decision = "", line;
+		for (const block of blocks) {
+			ctx.beginPath();
+			ctx.fillStyle = "#f0f";
+			ctx.fillRect(block.x, block.y, block.w, block.h);
+			ctx.closePath();
+			const margin = 2;
+			if (Math.abs(block.x+block.w/2 - player.pos.x) < block.w/2 + margin &&
+			/**/Math.abs(block.y+block.h/2 - player.pos.y) < block.h/2 + margin) {
+				const xline = player.pos.x > block.x + block.w/2 ? block.x + block.w + margin : block.x - margin;
+				const yline = player.pos.y > block.y + block.h/2 ? block.y + block.h + margin : block.y - margin;
+				const xd = player.pos.x - xline;
+				const yd = player.pos.y - yline;
+				const xt = xd / player.vel.x;
+				const yt = yd / player.vel.y;
+				let dec;
+				if (xt < 0) {
+					dec = "ya";
+					line = yline;
+				} else if (yt < 0) {
+					dec = "xa";
+					line = xline;
+				} else if (xt < yt) {
+					dec = "x";
+					line = xline;
+				} else {
+					dec = "y";
+					line = yline;
+				}
+				if (dec[0] == "x") {
+					if (xt < minpostime) {
+						minpostime = xt;
+						line = xline;
+						decision = "x";
+					}
+				} else {
+					if (yt < minpostime) {
+						minpostime = yt;
+						line = yline;
+						decision = "y";
+					}
+				}
 			}
-			if (decision[0] == "x") {
-				player.vel.x = 0;
-				player.pos.x = xline;
-			} else {
-				player.vel.y = 0;
-				player.pos.y = yline;
-			}
+		}
+		if (decision == "x") {
+			player.vel.x = 0;
+			player.pos.x = line;
+		} else if (decision == "y") {
+			player.vel.y = 0;
+			player.pos.y = line;
 		}
 	}
 	ctx.restore();
