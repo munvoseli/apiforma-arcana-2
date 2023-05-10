@@ -8,19 +8,24 @@ let beesprite;
 
 const canvas = g("canvas");
 const ctx = ct(canvas);
-canvas.width = canvas.height = 600;
+canvas.width = canvas.height = 800;
 ctx.imageSmoothingEnabled = false;
 let pxsize = 5;
 
-let controls = {n: false, w: false, e: false, s: false};
+let controls = {
+	n: false, w: false, e: false, s: false,
+	A: false, B: false
+};
 function handleKey(e) {
 	let b = e.type == "keydown";
-	switch (e.key) {
-	case "a": controls.w = b; break;
-	case "s": controls.s = b; break;
-	case "d": controls.e = b; break;
-	case "w":
-	case "f": controls.n = b; break;
+	switch (e.code) {
+	case "KeyA": controls.w = b; break;
+	case "KeyS": controls.s = b; break;
+	case "KeyD": controls.e = b; break;
+	case "KeyW":
+	case "KeyF": controls.n = b; break;
+	case "KeyJ": controls.A = b; break;
+	case "KeyK": controls.B = b; break;
 	}
 }
 addEventListener("keydown", handleKey, false);
@@ -45,98 +50,194 @@ class Vec {
 	clone() {
 		return new Vec(this.x, this.y);
 	}
-	rotateTowards(v2) {
+	dot(v2) {
+		return this.x * v2.x + this.y * v2.y;
+	}
+	rotateTowards(v2, elapsedTime) {
+		// this is a vector of length 1
+		// v2 might not be
 		// should cause most change when perpendicular
+		// warning: this is not mathematically verified with respect to elapsedTime
 		const v3 = v2.clone();
 		v3.normalize();
-		this.x += v2.x/2;
-		this.y += v2.y/2;
+		const dot = this.dot(v3);
+		this.x += v2.x*8;
+		this.y += v2.y*8;
 		this.normalize();
 	}
 }
 
+
+const TileEnum = {
+	Ungenerated: 0,
+};
+const tileSize = 12;
+const baseVelocity = 1/8/16;
+
+class World {
+	constructor() {
+		this.tiles = new Uint8Array(256);
+		for (let i = 2; i < this.tiles.length; i++) {
+			this.tiles[i] = Math.random() < 0.1 ? 1 : 0;
+		}
+	}
+	getTile(x, y) {
+		if (x >= 0 && y >= 0 && x < 16 && y < 16) {
+			return this.tiles[x + 16 * y];
+		} else {
+			return 0;
+		}
+	}
+	setTile(x, y, t) {
+		if (x >= 0 && y >= 0 && x < 16 && y < 16) {
+			this.tiles[x + 16 * y] = t;
+		} else {
+			return 0;
+		}
+	}
+	draw() {
+		let i = 0;
+		for (let y = 0; y < 16; y++)
+		for (let x = 0; x < 16; x++) {
+			const t = this.tiles[i++];
+			switch (t) {
+			case 0: ctx.fillStyle = "#ccc"; break;
+			case 1: ctx.fillStyle = "#aca"; break;
+			default: ctx.fillStyle = "#500";
+			}
+			const s = tileSize;
+			ctx.fillRect(x*s, y*s, s, s);
+		}
+	}
+}
+const world = new World();
+
+
 function relu(x) { return x < 0 ? 0 : x; }
 
 let player = {
-	pos: new Vec(8, 8),
+	pos: new Vec(18, 18),
 	vel: new Vec(0, 0),
 	rot: new Vec(0.707, 0.707)
 };
 
-let blocks = [
-	{ x: 64, y: 68, w: 32, h: 32 },
-	{ x: 64, y: 32, w: 32, h: 32 },
-];
-function step() {
-	switch (1) { default:
-		let pow = 1/8;
-		let dx = controls.e - controls.w;
-		let dy = controls.s - controls.n;
-		if (dx == 0 && dy == 0) {
-			break;
+
+function applyBlockDenm(x, y, w, h) {
+	const margin = 2;
+	const dx = Math.abs(x+w/2 - player.pos.x) - w/2;
+	const dy = Math.abs(y+h/2 - player.pos.y) - h/2;
+	const maxd = Math.max(dx, dy);
+	if (Math.max(dx, dy) > margin) return; // just eliminate majority of cases
+	let d, nx, ny; // our three friends
+	if (maxd < 0) {
+		d = maxd;
+		if (dx > dy) {
+			nx = 1;
+			ny = 0;
+		} else {
+			nx = 0;
+			ny = 1;
 		}
-		if (dx != 0 && dy != 0) {
-			dx /= Math.sqrt(2);
-			dy /= Math.sqrt(2);
-		}
-		const dot = dx * player.rot.x + dy * player.rot.y; // [-1, 1]
-		const undot = (dot + 2) / 3; // [, 1]
-		pow *= undot;
-		player.vel.x += pow * dx;
-		player.vel.y += pow * dy;
+	} else {
+		d = Math.sqrt(relu(dx)**2 + relu(dy)**2);
+		nx = relu(dx) / d;
+		ny = relu(dy) / d;
 	}
-	player.vel.x *= 0.9;
-	player.vel.y *= 0.9;
-	player.pos.x += player.vel.x;
-	player.pos.y += player.vel.y;
-	player.rot.rotateTowards(player.vel);
-	ctx.setTransform(1,0,0,1,0,0);
-	ctx.clearRect(0, 0, canvas.width, canvas.height);
-	ctx.save();
-	ctx.scale(pxsize, pxsize);
-	{
-		for (const block of blocks) {
-			ctx.beginPath();
-			ctx.fillStyle = "#f0f";
-			ctx.fillRect(block.x, block.y, block.w, block.h);
-			ctx.closePath();
-			const margin = 2;
-			const dx = Math.abs(block.x+block.w/2 - player.pos.x) - block.w/2;
-			const dy = Math.abs(block.y+block.h/2 - player.pos.y) - block.h/2;
-			const maxd = Math.max(dx, dy);
-			if (Math.max(dx, dy) > margin) continue; // just eliminate majority of cases
-			let d, nx, ny; // our three friends
-			if (maxd < 0) {
-				d = maxd;
-				if (dx > dy) {
-					nx = 1;
-					ny = 0;
-				} else {
-					nx = 0;
-					ny = 1;
-				}
-			} else {
-				d = Math.sqrt(relu(dx)**2 + relu(dy)**2);
-				nx = relu(dx) / d;
-				ny = relu(dy) / d;
-			}
-			d -= margin;
-			if (player.pos.x < block.x + block.w/2) nx *= -1;
-			if (player.pos.y < block.y + block.h/2) ny *= -1;
-			if (d < 0) {
-				player.pos.x -= d * nx;
-				player.pos.y -= d * ny;
-				// this is more accurate but punishes clipping corners
-				// const dot = nx * player.vel.x + ny * player.vel.y;
-				// player.vel.x -= dot * nx;
-				// player.vel.y -= dot * ny;
-			}
-		}
+	d -= margin;
+	if (player.pos.x < x + w/2) nx *= -1;
+	if (player.pos.y < y + h/2) ny *= -1;
+	if (d < 0) {
+		player.pos.x -= d * nx;
+		player.pos.y -= d * ny;
+		// this is more accurate but punishes clipping corners
+		// const dot = nx * player.vel.x + ny * player.vel.y;
+		// player.vel.x -= dot * nx;
+		// player.vel.y -= dot * ny;
 	}
-	ctx.restore();
-	drawBeeSprite(player.pos.x, player.pos.y, 5);
 }
-setInterval(step, 1000/60);
+
+class Step {
+	static lastStepTime = Date.now();
+	static frameRequested = false;
+	static step() {
+		let nowTime = Date.now();
+		const elapsedTime = nowTime - Step.lastStepTime;
+		Step.lastStepTime = nowTime;
+		Step.movementStep(elapsedTime);
+		Step.physicsStep();
+		Step.miscControlsStep();
+		if (!Step.frameRequested)
+			requestAnimationFrame(Step.draw);
+	}
+	static movementStep(elapsedTime) {
+		switch (1) { default:
+			let pow = baseVelocity; // or, acceleration, really
+			let dx = controls.e - controls.w;
+			let dy = controls.s - controls.n;
+			if (dx == 0 && dy == 0) {
+				break;
+			}
+			if (dx != 0 && dy != 0) {
+				dx /= Math.sqrt(2);
+				dy /= Math.sqrt(2);
+			}
+			const dot = dx * player.rot.x + dy * player.rot.y; // [-1, 1]
+			const undot = (dot + 2) / 3; // [, 1]
+			pow *= undot;
+			player.vel.x += pow * dx;
+			player.vel.y += pow * dy;
+		}
+		{
+			const resistance = 0.9 ** (elapsedTime / 16);
+			player.vel.x *= resistance;
+			player.vel.y *= resistance;
+			player.rot.rotateTowards(player.vel, elapsedTime);
+			player.pos.x += player.vel.x * elapsedTime;
+			player.pos.y += player.vel.y * elapsedTime;
+		}
+	}
+	static physicsStep() {
+		const cx = Math.floor(player.pos.x/tileSize);
+		const cy = Math.floor(player.pos.y/tileSize);
+		for (let y = cy-1; y <= cy+1; ++y)
+		for (let x = cx-1; x <= cx+1; ++x) {
+			if (world.getTile(x, y) != 1) continue;
+			const bx = x * tileSize;
+			const by = y * tileSize;
+			applyBlockDenm(bx, by, tileSize, tileSize);
+		}
+	}
+	static miscControlsStep() {
+		if (controls.A) {
+			const cx = Math.floor(player.pos.x/tileSize);
+			const cy = Math.floor(player.pos.y/tileSize);
+			const ax = Math.floor((player.pos.x - player.rot.x * 13)/tileSize);
+			const ay = Math.floor((player.pos.y - player.rot.y * 13)/tileSize);
+			if ((ax != cx || ay != cy)) {
+				world.setTile(ax, ay, 1);
+			}
+		}
+		if (controls.B) {
+			const ax = Math.floor((player.pos.x + player.rot.x * 8)/tileSize);
+			const ay = Math.floor((player.pos.y + player.rot.y * 8)/tileSize);
+			if (world.getTile(ax, ay) == 1) {
+				world.setTile(ax, ay, 0);
+			}
+		}
+	}
+	static draw() {
+		ctx.setTransform(1,0,0,1,0,0);
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		ctx.save();
+		ctx.scale(pxsize, pxsize);
+		world.draw();
+		ctx.restore();
+		drawBeeSprite(player.pos.x, player.pos.y, 5);
+		Step.frameRequested = false;
+	}
+}
+setInterval(Step.step, 1000/60);
+
 
 
 
@@ -151,7 +252,7 @@ function drawBeeSprite(x, y, rot) {
 		x, y);
 	ctx.drawImage(beesprite, -13, -5);
 	ctx.fillStyle = 'rgba(128,128,128,0.8)';
-	const m = player.vel.mag();
+	const m = player.vel.mag() / baseVelocity / 8;
 	function drawWing() {
 		ctx.translate(0, 2);
 		ctx.rotate(-m);
