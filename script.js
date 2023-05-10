@@ -74,12 +74,40 @@ const TileEnum = {
 const tileSize = 12;
 const baseVelocity = 1/8/16;
 
+function drawCornerOverlay(h, v, d, ctx) {
+	const l = tileSize/2;
+	if (h && v && !d) {
+		ctx.fillRect(0, 0, 1, 1);
+		return;
+	}
+	switch (h * 2 + v) {
+	case 0b00:
+		ctx.fillRect(0, 0, l, 1);
+		ctx.fillRect(0, 0, 1, l);
+		break;
+	case 0b10:
+		ctx.fillRect(0, 0, l, 1);
+		break;
+	case 0b01:
+		ctx.fillRect(0, 0, 1, l);
+		break;
+	case 0b11:
+		break;
+	}
+}
+
+
 class World {
 	constructor() {
 		this.tiles = new Uint8Array(256);
 		for (let i = 2; i < this.tiles.length; i++) {
-			this.tiles[i] = Math.random() < 0.1 ? 1 : 0;
+			this.tiles[i] = Math.random() < 0.3 ? 1 : 0;
 		}
+		this.canvas = c("canvas");
+		this.canvas.width = tileSize * 16;
+		this.canvas.height = tileSize * 16;
+		this.ctx = ct(this.canvas);
+		this.refreshCanvas();
 	}
 	getTile(x, y) {
 		if (x >= 0 && y >= 0 && x < 16 && y < 16) {
@@ -95,19 +123,59 @@ class World {
 			return 0;
 		}
 	}
-	draw() {
+	refreshCanvas() {
 		let i = 0;
+		const ctx = this.ctx;
 		for (let y = 0; y < 16; y++)
 		for (let x = 0; x < 16; x++) {
 			const t = this.tiles[i++];
 			switch (t) {
 			case 0: ctx.fillStyle = "#ccc"; break;
-			case 1: ctx.fillStyle = "#aca"; break;
+			case 1: ctx.fillStyle = "#a2a299"; break;
 			default: ctx.fillStyle = "#500";
 			}
 			const s = tileSize;
 			ctx.fillRect(x*s, y*s, s, s);
+			if (t == 1) {
+				ctx.fillStyle = "#000";
+				ctx.save();
+				// northwest
+				ctx.translate(x*s, y*s);
+				drawCornerOverlay(
+					this.getTile(x-1, y),
+					this.getTile(x, y-1),
+					this.getTile(x-1,y-1),
+					this.ctx);
+				// northeast
+				ctx.translate(s, 0);
+				ctx.scale(-1, 1);
+				drawCornerOverlay(
+					this.getTile(x+1, y),
+					this.getTile(x, y-1),
+					this.getTile(x+1,y-1),
+					this.ctx);
+				// southeast
+				ctx.translate(0, s);
+				ctx.scale(1, -1);
+				drawCornerOverlay(
+					this.getTile(x+1, y),
+					this.getTile(x, y+1),
+					this.getTile(x+1,y+1),
+					this.ctx);
+				// southwest
+				ctx.translate(s, 0);
+				ctx.scale(-1, 1);
+				drawCornerOverlay(
+					this.getTile(x-1, y),
+					this.getTile(x, y+1),
+					this.getTile(x-1,y+1),
+					this.ctx);
+				ctx.restore();
+			}
 		}
+	}
+	draw() {
+		ctx.drawImage(this.canvas, 0, 0);
 	}
 }
 const world = new World();
@@ -229,10 +297,12 @@ class Step {
 		ctx.setTransform(1,0,0,1,0,0);
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		ctx.save();
+		ctx.translate(canvas.width/2, canvas.height/2);
 		ctx.scale(pxsize, pxsize);
+		ctx.translate(-player.pos.x, -player.pos.y);
 		world.draw();
-		ctx.restore();
 		drawBeeSprite(player.pos.x, player.pos.y, 5);
+		ctx.restore();
 		Step.frameRequested = false;
 	}
 }
@@ -245,7 +315,6 @@ function drawBeeSprite(x, y, rot) {
 	ctx.save();
 	//ctx.translate(x, y);
 	//ctx.rotate(rot);
-	ctx.scale(pxsize, pxsize);
 	ctx.transform(
 		player.rot.x, player.rot.y,
 		-player.rot.y, player.rot.x,
