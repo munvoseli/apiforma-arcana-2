@@ -55,6 +55,8 @@ class Vec {
 	}
 }
 
+function relu(x) { return x < 0 ? 0 : x; }
+
 let player = {
 	pos: new Vec(8, 8),
 	vel: new Vec(0, 0),
@@ -62,7 +64,7 @@ let player = {
 };
 
 let blocks = [
-	{ x: 64, y: 64, w: 32, h: 32 },
+	{ x: 64, y: 68, w: 32, h: 32 },
 	{ x: 64, y: 32, w: 32, h: 32 },
 ];
 function step() {
@@ -93,57 +95,42 @@ function step() {
 	ctx.save();
 	ctx.scale(pxsize, pxsize);
 	{
-		let minpostime = Infinity;
-		let decision = "", line;
 		for (const block of blocks) {
 			ctx.beginPath();
 			ctx.fillStyle = "#f0f";
 			ctx.fillRect(block.x, block.y, block.w, block.h);
 			ctx.closePath();
 			const margin = 2;
-			if (Math.abs(block.x+block.w/2 - player.pos.x) < block.w/2 + margin &&
-			/**/Math.abs(block.y+block.h/2 - player.pos.y) < block.h/2 + margin) {
-				const xline = player.pos.x > block.x + block.w/2 ? block.x + block.w + margin : block.x - margin;
-				const yline = player.pos.y > block.y + block.h/2 ? block.y + block.h + margin : block.y - margin;
-				const xd = player.pos.x - xline;
-				const yd = player.pos.y - yline;
-				const xt = xd / player.vel.x;
-				const yt = yd / player.vel.y;
-				let dec;
-				if (xt < 0) {
-					dec = "ya";
-					line = yline;
-				} else if (yt < 0) {
-					dec = "xa";
-					line = xline;
-				} else if (xt < yt) {
-					dec = "x";
-					line = xline;
+			const dx = Math.abs(block.x+block.w/2 - player.pos.x) - block.w/2;
+			const dy = Math.abs(block.y+block.h/2 - player.pos.y) - block.h/2;
+			const maxd = Math.max(dx, dy);
+			if (Math.max(dx, dy) > margin) continue; // just eliminate majority of cases
+			let d, nx, ny; // our three friends
+			if (maxd < 0) {
+				d = maxd;
+				if (dx > dy) {
+					nx = 1;
+					ny = 0;
 				} else {
-					dec = "y";
-					line = yline;
+					nx = 0;
+					ny = 1;
 				}
-				if (dec[0] == "x") {
-					if (xt < minpostime) {
-						minpostime = xt;
-						line = xline;
-						decision = "x";
-					}
-				} else {
-					if (yt < minpostime) {
-						minpostime = yt;
-						line = yline;
-						decision = "y";
-					}
-				}
+			} else {
+				d = Math.sqrt(relu(dx)**2 + relu(dy)**2);
+				nx = relu(dx) / d;
+				ny = relu(dy) / d;
 			}
-		}
-		if (decision == "x") {
-			player.vel.x = 0;
-			player.pos.x = line;
-		} else if (decision == "y") {
-			player.vel.y = 0;
-			player.pos.y = line;
+			d -= margin;
+			if (player.pos.x < block.x + block.w/2) nx *= -1;
+			if (player.pos.y < block.y + block.h/2) ny *= -1;
+			if (d < 0) {
+				player.pos.x -= d * nx;
+				player.pos.y -= d * ny;
+				// this is more accurate but punishes clipping corners
+				// const dot = nx * player.vel.x + ny * player.vel.y;
+				// player.vel.x -= dot * nx;
+				// player.vel.y -= dot * ny;
+			}
 		}
 	}
 	ctx.restore();
