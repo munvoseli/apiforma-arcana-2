@@ -1,3 +1,5 @@
+'use strict';
+
 const c = (a => document.createElement(a));
 const g = function(a) {return document.getElementById(a)};
 const ct = (cnv => cnv.getContext("2d"));
@@ -116,62 +118,76 @@ class World {
 			return 0;
 		}
 	}
+	drawTile(x, y) {
+		this.drawTileSpecified(x, y, this.getTile(x, y));
+	}
 	setTile(x, y, t) {
 		if (x >= 0 && y >= 0 && x < 16 && y < 16) {
-			this.tiles[x + 16 * y] = t;
+			if (this.tiles[x + 16 * y] != t) {
+				this.tiles[x + 16 * y] = t;
+				for (let yy = y-1; yy <= y+1; yy++)
+				for (let xx = x-1; xx <= x+1; xx++) {
+					this.drawTile(xx, yy);
+				}
+			}
 		} else {
 			return 0;
+		}
+	}
+	drawTileSpecified(x, y, t) {
+		const ctx = this.ctx;
+		switch (t) {
+		case 0: ctx.fillStyle = "#ccc"; break;
+		case 1: ctx.fillStyle = "#a2a299"; break;
+		default: ctx.fillStyle = "#500";
+		}
+		const s = tileSize;
+		ctx.fillRect(x*s, y*s, s, s);
+		if (t == 1) {
+			ctx.fillStyle = "#000";
+			ctx.save();
+			// northwest
+			ctx.translate(x*s, y*s);
+			drawCornerOverlay(
+				this.getTile(x-1, y),
+				this.getTile(x, y-1),
+				this.getTile(x-1,y-1),
+				this.ctx);
+			// northeast
+			ctx.translate(s, 0);
+			ctx.scale(-1, 1);
+			drawCornerOverlay(
+				this.getTile(x+1, y),
+				this.getTile(x, y-1),
+				this.getTile(x+1,y-1),
+				this.ctx);
+			// southeast
+			ctx.translate(0, s);
+			ctx.scale(1, -1);
+			drawCornerOverlay(
+				this.getTile(x+1, y),
+				this.getTile(x, y+1),
+				this.getTile(x+1,y+1),
+				this.ctx);
+			// southwest
+			ctx.translate(s, 0);
+			ctx.scale(-1, 1);
+			drawCornerOverlay(
+				this.getTile(x-1, y),
+				this.getTile(x, y+1),
+				this.getTile(x-1,y+1),
+				this.ctx);
+			ctx.restore();
 		}
 	}
 	refreshCanvas() {
 		let i = 0;
 		const ctx = this.ctx;
+		ctx.setTransform(1,0,0,1,0,0);
 		for (let y = 0; y < 16; y++)
 		for (let x = 0; x < 16; x++) {
 			const t = this.tiles[i++];
-			switch (t) {
-			case 0: ctx.fillStyle = "#ccc"; break;
-			case 1: ctx.fillStyle = "#a2a299"; break;
-			default: ctx.fillStyle = "#500";
-			}
-			const s = tileSize;
-			ctx.fillRect(x*s, y*s, s, s);
-			if (t == 1) {
-				ctx.fillStyle = "#000";
-				ctx.save();
-				// northwest
-				ctx.translate(x*s, y*s);
-				drawCornerOverlay(
-					this.getTile(x-1, y),
-					this.getTile(x, y-1),
-					this.getTile(x-1,y-1),
-					this.ctx);
-				// northeast
-				ctx.translate(s, 0);
-				ctx.scale(-1, 1);
-				drawCornerOverlay(
-					this.getTile(x+1, y),
-					this.getTile(x, y-1),
-					this.getTile(x+1,y-1),
-					this.ctx);
-				// southeast
-				ctx.translate(0, s);
-				ctx.scale(1, -1);
-				drawCornerOverlay(
-					this.getTile(x+1, y),
-					this.getTile(x, y+1),
-					this.getTile(x+1,y+1),
-					this.ctx);
-				// southwest
-				ctx.translate(s, 0);
-				ctx.scale(-1, 1);
-				drawCornerOverlay(
-					this.getTile(x-1, y),
-					this.getTile(x, y+1),
-					this.getTile(x-1,y+1),
-					this.ctx);
-				ctx.restore();
-			}
+			this.drawTileSpecified(x, y, t);
 		}
 	}
 	draw() {
@@ -306,7 +322,6 @@ class Step {
 		Step.frameRequested = false;
 	}
 }
-setInterval(Step.step, 1000/60);
 
 
 
@@ -355,5 +370,6 @@ sprites.onload = function() {
 	const ctxb = ct(beesprite);
 	ctxb.drawImage(sprites, 3+23*0,18+11*0, 23,10,  0,0, 23,10);
 	//drawBeeSprite(75, 50, 0.8);
+	setInterval(Step.step, 1000/60);
 };
 sprites.src = "sprites.png";
