@@ -14,6 +14,7 @@ canvas.width = canvas.height = 800;
 ctx.imageSmoothingEnabled = false;
 let pxsize = 5;
 
+
 let controls = {
 	n: false, w: false, e: false, s: false,
 	A: false, B: false
@@ -69,6 +70,56 @@ class Vec {
 	}
 }
 
+const tileColors = [
+	// forbidden, the green is colorless
+	85,0,85,
+	// pinks
+	255,150,255,
+	255,80,198,
+	255,153,192,
+	226,92,141,
+	191,26,118,
+	// red to orange
+	242,62,24,
+	246,99,63,
+	246,129,68,
+	251,189,148,
+	247,162,74,
+	132,89,0,
+	// yellow
+	255,241,148,
+	247,223,74,
+	// green
+	113,219,98,
+	84,206,67,
+	49,184,30,
+	// mint
+	151,254,191,
+	76,237,199,
+	12,164,119,
+	// sky
+	102, 221, 255,
+	56, 190, 241,
+	// blue
+	154,208,249,
+	105,127,200,
+	51,52,227,
+	26,27,191,
+	// purple
+	220,169,242,
+	204,109,244,
+	194,85,241,
+	142,26,191,
+	// greyscale
+	255,255,255,
+	181,181,181,
+	93,93,93,
+	34,34,34,
+	0xa2,0xa2,0x99,
+	// ubq
+	231,158,0,
+	225,115,255,
+];
 
 const TileEnum = {
 	Ungenerated: 0,
@@ -76,44 +127,57 @@ const TileEnum = {
 const tileSize = 12;
 const baseVelocity = 1/8/16;
 
-function drawCornerOverlay(h, v, d, ctx) {
+function drawCornerOverlay(h, v, d, ctx, w) {
+	h = h & 2;
+	v = v & 2;
+	d = d & 2;
 	const l = tileSize/2;
 	if (h && v && !d) {
-		ctx.fillRect(0, 0, 1, 1);
+		ctx.fillRect(0, 0, 1, w);
 		return;
 	}
-	switch (h * 2 + v) {
+	switch (h + v/2) {
 	case 0b00:
-		ctx.fillRect(0, 0, l, 1);
-		ctx.fillRect(0, 0, 1, l);
+		ctx.fillRect(0, 0, l, w);
+		ctx.fillRect(0, 0, w, l);
 		break;
 	case 0b10:
-		ctx.fillRect(0, 0, l, 1);
+		ctx.fillRect(0, 0, l, w);
 		break;
 	case 0b01:
-		ctx.fillRect(0, 0, 1, l);
+		ctx.fillRect(0, 0, w, l);
 		break;
 	case 0b11:
 		break;
+	default:
 	}
 }
 
 
 class World {
-	constructor() {
-		this.tiles = new Uint8Array(256);
-		for (let i = 2; i < this.tiles.length; i++) {
-			this.tiles[i] = Math.random() < 0.3 ? 1 : 0;
+	constructor(tiles, w, h) {
+		if (!tiles) {
+			this.tiles = new Uint8Array(256);
+			for (let i = 0; i < this.tiles.length; i++) {
+				const r = Math.random();
+				this.tiles[i] = Math.floor(Math.random() * (tileColors.length/3-1) + 1) * 4 + (r < 0.25 ? 3 : r < 0.3 ? 2 : 0);
+			}
+			this.w = 16;
+			this.h = 16;
+		} else {
+			this.tiles = tiles;
+			this.w = w;
+			this.h = h;
 		}
 		this.canvas = c("canvas");
-		this.canvas.width = tileSize * 16;
-		this.canvas.height = tileSize * 16;
+		this.canvas.width = tileSize * this.w;
+		this.canvas.height = tileSize * this.h;
 		this.ctx = ct(this.canvas);
 		this.refreshCanvas();
 	}
 	getTile(x, y) {
-		if (x >= 0 && y >= 0 && x < 16 && y < 16) {
-			return this.tiles[x + 16 * y];
+		if (x >= 0 && y >= 0 && x < this.w && y < this.h) {
+			return this.tiles[x + this.w * y];
 		} else {
 			return 0;
 		}
@@ -122,9 +186,9 @@ class World {
 		this.drawTileSpecified(x, y, this.getTile(x, y));
 	}
 	setTile(x, y, t) {
-		if (x >= 0 && y >= 0 && x < 16 && y < 16) {
-			if (this.tiles[x + 16 * y] != t) {
-				this.tiles[x + 16 * y] = t;
+		if (x >= 0 && y >= 0 && x < this.w && y < this.h) {
+			if (this.tiles[x + this.w * y] != t) {
+				this.tiles[x + this.w * y] = t;
 				for (let yy = y-1; yy <= y+1; yy++)
 				for (let xx = x-1; xx <= x+1; xx++) {
 					this.drawTile(xx, yy);
@@ -136,15 +200,18 @@ class World {
 	}
 	drawTileSpecified(x, y, t) {
 		const ctx = this.ctx;
-		switch (t) {
-		case 0: ctx.fillStyle = "#ccc"; break;
-		case 1: ctx.fillStyle = "#a2a299"; break;
-		default: ctx.fillStyle = "#500";
-		}
+		const ci = (t >> 2) * 3;
+		const r = tileColors[ci + 0];
+		const g = tileColors[ci + 1];
+		const b = tileColors[ci + 2];
+		const color = 'rgb('+r+','+g+','+b+')';
+		ctx.fillStyle = color;
 		const s = tileSize;
 		ctx.fillRect(x*s, y*s, s, s);
-		if (t == 1) {
-			ctx.fillStyle = "#000";
+		if (t & 2) {
+			const w = (t & 1) ? 1.5 : 1;
+			const color = r+g+b>3*64 ? "#000" : "#555";
+			ctx.fillStyle = color;
 			ctx.save();
 			// northwest
 			ctx.translate(x*s, y*s);
@@ -152,7 +219,7 @@ class World {
 				this.getTile(x-1, y),
 				this.getTile(x, y-1),
 				this.getTile(x-1,y-1),
-				this.ctx);
+				this.ctx, w);
 			// northeast
 			ctx.translate(s, 0);
 			ctx.scale(-1, 1);
@@ -160,7 +227,7 @@ class World {
 				this.getTile(x+1, y),
 				this.getTile(x, y-1),
 				this.getTile(x+1,y-1),
-				this.ctx);
+				this.ctx, w);
 			// southeast
 			ctx.translate(0, s);
 			ctx.scale(1, -1);
@@ -168,7 +235,7 @@ class World {
 				this.getTile(x+1, y),
 				this.getTile(x, y+1),
 				this.getTile(x+1,y+1),
-				this.ctx);
+				this.ctx, w);
 			// southwest
 			ctx.translate(s, 0);
 			ctx.scale(-1, 1);
@@ -176,16 +243,34 @@ class World {
 				this.getTile(x-1, y),
 				this.getTile(x, y+1),
 				this.getTile(x-1,y+1),
-				this.ctx);
+				this.ctx, w);
 			ctx.restore();
 		}
+		//if (t & 1) {
+		//	ctx.save();
+		//	for (let i = 0; i < 10; i++) {
+		//		const v = Math.floor(Math.random()*256);
+		//		const color = 'rgba('+v+','+v+','+v+',0.5)'
+		//		ctx.fillStyle = color;
+		//		ctx.fillRect(
+		//			Math.floor(Math.random() * s) + x*s,
+		//			Math.floor(Math.random() * s) + y*s,
+		//			1,1);
+		//		//imageData.data[0] = imageData.data[1] = imageData.data[2] = Math.floor(Math.random() * 256);
+		//		//ctx.putImageData(
+		//		//	imageData,
+		//		//	Math.floor(Math.random() * s) + x*s,
+		//		//	Math.floor(Math.random() * s) + y*s);
+		//	}
+		//	ctx.restore();
+		//}
 	}
 	refreshCanvas() {
 		let i = 0;
 		const ctx = this.ctx;
 		ctx.setTransform(1,0,0,1,0,0);
-		for (let y = 0; y < 16; y++)
-		for (let x = 0; x < 16; x++) {
+		for (let y = 0; y < this.h; y++)
+		for (let x = 0; x < this.w; x++) {
 			const t = this.tiles[i++];
 			this.drawTileSpecified(x, y, t);
 		}
@@ -194,8 +279,41 @@ class World {
 		ctx.drawImage(this.canvas, 0, 0);
 	}
 }
-const world = new World();
+let world;// = new World();
 
+function setLevel(str) {
+	const lines = str.split('\n');
+	const width = lines[0].length / 2;
+	const height = lines.length;
+	let tiles = new Uint8Array(width * height);
+	let i = 0;
+	for (let y = 0; y < height; y++) {
+	for (let x = 0; x < width; x++) {
+		const s = lines[y].substring(2*x, 2*x+2);
+		tiles[i] = 4;
+		switch (s) {
+		case '[]': tiles[i] = 6; break;
+		case 'EX': break;
+		case 'EN': break;
+		case 'SS': break;
+		case '  ': break;
+		default: console.error("Unknown tile boi", s);
+		}
+		++i;
+	}
+	}
+	world = new World(tiles, width, height);
+}
+const levels = [`\
+[][][][][][][]
+[]EX        []
+[]  EN      []
+[][][]      []
+[]    []    []
+[]          []
+[]SS      [][]
+[][][][][][][]`];
+setLevel(levels[0]);
 
 function relu(x) { return x < 0 ? 0 : x; }
 
@@ -285,7 +403,7 @@ class Step {
 		const cy = Math.floor(player.pos.y/tileSize);
 		for (let y = cy-1; y <= cy+1; ++y)
 		for (let x = cx-1; x <= cx+1; ++x) {
-			if (world.getTile(x, y) != 1) continue;
+			if ((world.getTile(x, y) & 2) == 0) continue;
 			const bx = x * tileSize;
 			const by = y * tileSize;
 			applyBlockDenm(bx, by, tileSize, tileSize);
@@ -304,8 +422,8 @@ class Step {
 		if (controls.B) {
 			const ax = Math.floor((player.pos.x + player.rot.x * 8)/tileSize);
 			const ay = Math.floor((player.pos.y + player.rot.y * 8)/tileSize);
-			if (world.getTile(ax, ay) == 1) {
-				world.setTile(ax, ay, 0);
+			if (world.getTile(ax, ay) != 1) {
+				world.setTile(ax, ay, 1);
 			}
 		}
 	}
